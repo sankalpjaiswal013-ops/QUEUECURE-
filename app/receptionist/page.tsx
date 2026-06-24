@@ -26,6 +26,10 @@ export default function ReceptionistPage() {
   const [settings, setSettings] = useState<ClinicSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
+  // Security State
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [pin, setPin] = useState("");
+  
   const [name, setName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -118,6 +122,10 @@ export default function ReceptionistPage() {
 
     setName("");
     inputRef.current?.focus();
+    
+    // Explicitly update UI immediately (fallback if Realtime is disabled in Supabase)
+    fetchPatients();
+    fetchSettings();
   };
 
   const handleCallNext = async () => {
@@ -134,6 +142,7 @@ export default function ReceptionistPage() {
       toast.error("Failed to call next patient.");
     } else {
       toast.success(`Calling Token #${nextPatient.token_number}`);
+      fetchPatients();
     }
   };
 
@@ -145,6 +154,8 @@ export default function ReceptionistPage() {
       
     if (error) {
       toast.error("Failed to mark patient as done.");
+    } else {
+      fetchPatients();
     }
   };
 
@@ -181,6 +192,46 @@ export default function ReceptionistPage() {
         }, 0) / doneToday.length
       )
     : 0;
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center font-sans p-4">
+        <Card className="w-full max-w-sm border-slate-200 shadow-sm rounded-3xl">
+          <CardHeader className="text-center pb-4 pt-8">
+            <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <CardTitle className="text-2xl font-bold">Staff Access</CardTitle>
+            <CardDescription className="text-base mt-2">Enter the clinic PIN to manage the queue.</CardDescription>
+          </CardHeader>
+          <CardContent className="pb-8">
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (pin === "1234") {
+                setIsAuthenticated(true);
+                toast.success("Access granted");
+              } else {
+                toast.error("Incorrect PIN");
+                setPin("");
+              }
+            }} className="space-y-4">
+              <Input
+                type="password"
+                placeholder="Enter PIN"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                className="text-center text-xl tracking-widest h-12"
+                autoFocus
+              />
+              <Button type="submit" size="lg" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg h-12">
+                Unlock Portal
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -221,22 +272,31 @@ export default function ReceptionistPage() {
         <div className="grid md:grid-cols-2 gap-6">
           
           {/* Add Patient Form */}
-          <Card className="border-slate-100 shadow-sm rounded-2xl">
+          <Card className="border-slate-100 shadow-sm rounded-2xl flex flex-col">
             <CardHeader className="pb-4">
               <CardTitle>Add Patient</CardTitle>
               <CardDescription>Assign the next token to a new arrival</CardDescription>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleAddPatient} className="flex gap-3">
-                <Input
-                  ref={inputRef}
-                  placeholder="Patient Name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="flex-1"
-                  autoFocus
-                />
-                <Button type="submit" disabled={!name.trim() || !settings}>
+            <CardContent className="mt-auto">
+              <form onSubmit={handleAddPatient} className="flex gap-3 items-end">
+                <div className="flex-1 space-y-2">
+                  <Label className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
+                    Patient Name
+                  </Label>
+                  <Input
+                    ref={inputRef}
+                    placeholder="Enter full name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full font-medium"
+                    autoFocus
+                  />
+                </div>
+                <Button 
+                  type="submit" 
+                  disabled={!name.trim() || !settings}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold whitespace-nowrap h-9 px-4"
+                >
                   Add & Assign Token
                 </Button>
               </form>
@@ -244,32 +304,32 @@ export default function ReceptionistPage() {
           </Card>
 
           {/* Quick Actions & Settings */}
-          <Card className="border-slate-100 shadow-sm rounded-2xl">
+          <Card className="border-slate-100 shadow-sm rounded-2xl flex flex-col">
             <CardHeader className="pb-4">
               <CardTitle>Actions & Settings</CardTitle>
+              <CardDescription>Call patients and adjust wait times</CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col sm:flex-row gap-6 items-start sm:items-center">
-              <div className="flex-1 w-full">
+            <CardContent className="mt-auto">
+              <div className="flex gap-3 items-end">
+                <div className="flex-1 space-y-2">
+                  <Label className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
+                    Est. Consultation (min)
+                  </Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={settings?.avg_consultation_minutes || 15}
+                    onChange={handleAvgChange}
+                    className="w-full text-center font-medium"
+                  />
+                </div>
                 <Button 
                   onClick={handleCallNext} 
                   disabled={!hasWaiting}
-                  size="lg"
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold whitespace-nowrap h-9 px-4"
                 >
                   Call Next Patient
                 </Button>
-              </div>
-              <div className="flex-1 w-full space-y-2">
-                <Label className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
-                  Est. Consultation (min)
-                </Label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={settings?.avg_consultation_minutes || 15}
-                  onChange={handleAvgChange}
-                  className="w-full text-center font-medium"
-                />
               </div>
             </CardContent>
           </Card>

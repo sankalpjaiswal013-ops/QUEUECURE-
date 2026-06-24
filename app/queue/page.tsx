@@ -44,13 +44,17 @@ export default function QueuePage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "clinic_settings" }, () => fetchData())
       .subscribe((status) => {
         setSyncStatus(status);
-        if (status === "CHANNEL_ERROR") {
-          toast.error("Lost live connection to queue");
-        }
       });
+
+    // Polling fallback: Guarantee the screen always updates every 3 seconds
+    // even if the user hasn't enabled Realtime websockets in their database
+    const pollInterval = setInterval(() => {
+      fetchData();
+    }, 3000);
 
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(pollInterval);
     };
   }, []);
 
