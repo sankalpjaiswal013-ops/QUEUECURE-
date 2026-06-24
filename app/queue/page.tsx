@@ -22,7 +22,14 @@ export default function QueuePage() {
   const fetchData = async () => {
     const { data: pData, error: pError } = await supabase.from("patients").select("*").in("status", ["waiting", "in_consultation"]);
     if (pError) toast.error("Failed to load queue data");
-    else if (pData) setPatients(pData);
+    else if (pData) {
+      const sorted = pData.sort((a, b) => {
+        if (a.is_priority && !b.is_priority) return -1;
+        if (!a.is_priority && b.is_priority) return 1;
+        return a.token_number - b.token_number;
+      });
+      setPatients(sorted);
+    }
 
     const { data: sData, error: sError } = await supabase.from("clinic_settings").select("*").eq("id", 1).single();
     if (sError) toast.error("Failed to load clinic settings");
@@ -128,8 +135,13 @@ export default function QueuePage() {
                 <div className="text-[120px] md:text-[200px] font-black text-white leading-none tracking-tighter drop-shadow-2xl">
                   #{nowServing.token_number}
                 </div>
-                <div className="mt-4 md:mt-8 text-4xl md:text-6xl font-bold text-blue-400 max-w-4xl truncate px-4">
+                <div className="mt-4 md:mt-8 text-4xl md:text-6xl font-bold text-blue-400 max-w-4xl truncate px-4 flex items-center justify-center gap-4">
                   {nowServing.name}
+                  {nowServing.is_priority && (
+                    <span className="bg-rose-500/20 text-rose-500 text-xl px-4 py-1.5 rounded-lg border border-rose-500/30 font-bold tracking-widest uppercase align-middle">
+                      Priority
+                    </span>
+                  )}
                 </div>
               </div>
             ) : (
@@ -173,6 +185,28 @@ export default function QueuePage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Up Next List */}
+        {patients.filter(p => p.status === "waiting").length > 0 && (
+          <div className="w-full max-w-5xl mt-8">
+            <h3 className="text-slate-500 font-semibold uppercase tracking-widest mb-6">Up Next</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {patients.filter(p => p.status === "waiting").slice(0, 3).map((p, idx) => (
+                <div key={p.id} className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 flex flex-col">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-2xl font-bold text-slate-300">#{p.token_number}</span>
+                    {p.is_priority && (
+                      <span className="bg-rose-500/10 text-rose-500 text-xs font-bold uppercase tracking-wider px-2 py-1 rounded border border-rose-500/20">
+                        Priority
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-lg font-medium text-slate-400 truncate">{p.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
       </main>
     </div>

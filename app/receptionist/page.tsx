@@ -31,6 +31,7 @@ export default function ReceptionistPage() {
   const [pin, setPin] = useState("");
   
   const [name, setName] = useState("");
+  const [isPriority, setIsPriority] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const fetchPatients = async () => {
@@ -50,7 +51,11 @@ export default function ReceptionistPage() {
     if (data) {
       const active = data
         .filter((p) => p.status !== "done")
-        .sort((a, b) => a.token_number - b.token_number);
+        .sort((a, b) => {
+          if (a.is_priority && !b.is_priority) return -1;
+          if (!a.is_priority && b.is_priority) return 1;
+          return a.token_number - b.token_number;
+        });
       const done = data.filter((p) => p.status === "done");
       
       setPatients(active);
@@ -112,7 +117,7 @@ export default function ReceptionistPage() {
     }
     
     const { error } = await supabase.from("patients").insert([
-      { name: name.trim(), token_number: nextToken, status: "waiting" }
+      { name: name.trim(), token_number: nextToken, status: "waiting", is_priority: isPriority }
     ]);
     if (error) {
       toast.error("Failed to add patient to queue.");
@@ -121,6 +126,7 @@ export default function ReceptionistPage() {
     toast.success(`${name.trim()} added (Token #${nextToken})`);
 
     setName("");
+    setIsPriority(false);
     inputRef.current?.focus();
     
     // Explicitly update UI immediately (fallback if Realtime is disabled in Supabase)
@@ -278,27 +284,38 @@ export default function ReceptionistPage() {
               <CardDescription>Assign the next token to a new arrival</CardDescription>
             </CardHeader>
             <CardContent className="mt-auto">
-              <form onSubmit={handleAddPatient} className="flex gap-3 items-end">
-                <div className="flex-1 space-y-2">
-                  <Label className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
-                    Patient Name
-                  </Label>
-                  <Input
-                    ref={inputRef}
-                    placeholder="Enter full name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full font-medium"
-                    autoFocus
-                  />
+              <form onSubmit={handleAddPatient} className="flex flex-col gap-3">
+                <div className="flex gap-3 items-end">
+                  <div className="flex-1 space-y-2">
+                    <Label className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
+                      Patient Name
+                    </Label>
+                    <Input
+                      ref={inputRef}
+                      placeholder="Enter full name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full font-medium"
+                      autoFocus
+                    />
+                  </div>
+                  <Button 
+                    type="submit" 
+                    disabled={!name.trim() || !settings}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold whitespace-nowrap h-9 px-4"
+                  >
+                    Add & Assign Token
+                  </Button>
                 </div>
-                <Button 
-                  type="submit" 
-                  disabled={!name.trim() || !settings}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold whitespace-nowrap h-9 px-4"
-                >
-                  Add & Assign Token
-                </Button>
+                <label className="flex items-center gap-2 cursor-pointer mt-1">
+                  <input 
+                    type="checkbox" 
+                    checked={isPriority} 
+                    onChange={(e) => setIsPriority(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-600"
+                  />
+                  <span className="text-sm font-medium text-slate-600">Priority / Emergency</span>
+                </label>
               </form>
             </CardContent>
           </Card>
@@ -365,7 +382,12 @@ export default function ReceptionistPage() {
                         #{p.token_number}
                       </TableCell>
                       <TableCell className="font-medium text-slate-700">
-                        {p.name}
+                        <div className="flex items-center gap-2">
+                          {p.name}
+                          {p.is_priority && (
+                            <span className="bg-rose-100 text-rose-700 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">Priority</span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         {p.status === "in_consultation" ? (
