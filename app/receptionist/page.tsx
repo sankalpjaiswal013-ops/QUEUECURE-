@@ -33,6 +33,10 @@ export default function ReceptionistPage() {
   const [name, setName] = useState("");
   const [isPriority, setIsPriority] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  
+  // Edit State
+  const [editingPatientId, setEditingPatientId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
 
   const fetchPatients = async () => {
     const startOfDay = new Date();
@@ -163,6 +167,20 @@ export default function ReceptionistPage() {
     } else {
       fetchPatients();
     }
+  };
+
+  const handleEditName = async (id: string) => {
+    if (!editingName.trim()) {
+      setEditingPatientId(null);
+      return;
+    }
+    const { error } = await supabase.from("patients").update({ name: editingName.trim() }).eq("id", id);
+    if (error) toast.error("Failed to update name");
+    else {
+      toast.success("Patient name updated");
+      fetchPatients();
+    }
+    setEditingPatientId(null);
   };
 
   // -- Debounced Settings Update --
@@ -307,15 +325,16 @@ export default function ReceptionistPage() {
                     Add & Assign Token
                   </Button>
                 </div>
-                <label className="flex items-center gap-2 cursor-pointer mt-1">
-                  <input 
-                    type="checkbox" 
-                    checked={isPriority} 
-                    onChange={(e) => setIsPriority(e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-600"
-                  />
-                  <span className="text-sm font-medium text-slate-600">Priority / Emergency</span>
-                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsPriority(!isPriority)}
+                  className={`mt-2 flex items-center justify-center gap-2 w-full py-2 rounded-lg border text-sm font-semibold transition-colors ${isPriority ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'}`}
+                >
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${isPriority ? 'border-rose-500' : 'border-slate-400'}`}>
+                    {isPriority && <div className="w-2 h-2 rounded-full bg-rose-500" />}
+                  </div>
+                  Flag as Priority / Emergency
+                </button>
               </form>
             </CardContent>
           </Card>
@@ -382,12 +401,36 @@ export default function ReceptionistPage() {
                         #{p.token_number}
                       </TableCell>
                       <TableCell className="font-medium text-slate-700">
-                        <div className="flex items-center gap-2">
-                          {p.name}
-                          {p.is_priority && (
-                            <span className="bg-rose-100 text-rose-700 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">Priority</span>
-                          )}
-                        </div>
+                        {editingPatientId === p.id ? (
+                          <div className="flex items-center gap-2">
+                            <Input 
+                              value={editingName} 
+                              onChange={(e) => setEditingName(e.target.value)} 
+                              className="h-8 w-40" 
+                              autoFocus 
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleEditName(p.id);
+                                if (e.key === 'Escape') setEditingPatientId(null);
+                              }}
+                            />
+                            <Button size="sm" onClick={() => handleEditName(p.id)} className="h-8 bg-blue-600 hover:bg-blue-700 text-white">Save</Button>
+                            <Button size="sm" variant="ghost" onClick={() => setEditingPatientId(null)} className="h-8">Cancel</Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 group">
+                            {p.name}
+                            {p.is_priority && (
+                              <span className="bg-rose-100 text-rose-700 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">Priority</span>
+                            )}
+                            <button 
+                              onClick={() => { setEditingPatientId(p.id); setEditingName(p.name); }}
+                              className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-blue-600 transition-opacity ml-2"
+                              title="Edit Name"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                            </button>
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         {p.status === "in_consultation" ? (
@@ -415,6 +458,53 @@ export default function ReceptionistPage() {
                       </TableCell>
                     </TableRow>
                   ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
+
+        {/* Completed Patients Table */}
+        <Card className="border-slate-100 shadow-sm rounded-2xl overflow-hidden mt-8 opacity-75 hover:opacity-100 transition-opacity">
+          <CardHeader className="bg-slate-50 border-b border-slate-100 py-4">
+            <CardTitle className="text-lg text-slate-600">Past Patients (Done Today)</CardTitle>
+          </CardHeader>
+          <div className="bg-white">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-[120px] pl-6">Token</TableHead>
+                  <TableHead>Patient Name</TableHead>
+                  <TableHead className="text-right pr-6">Consultation Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {doneToday.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="h-24 text-center text-slate-500 text-sm">
+                      No completed consultations yet today.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  doneToday.sort((a, b) => new Date(b.completed_at || 0).getTime() - new Date(a.completed_at || 0).getTime()).map((p) => {
+                    const duration = p.completed_at && p.called_at 
+                      ? Math.round((new Date(p.completed_at).getTime() - new Date(p.called_at).getTime()) / 60000)
+                      : 0;
+                      
+                    return (
+                      <TableRow key={p.id}>
+                        <TableCell className="pl-6 font-medium text-slate-500">
+                          #{p.token_number}
+                        </TableCell>
+                        <TableCell className="text-slate-600">
+                          {p.name}
+                        </TableCell>
+                        <TableCell className="text-right pr-6 text-sm text-slate-500">
+                          {duration > 0 ? `${duration} min` : '< 1 min'}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
