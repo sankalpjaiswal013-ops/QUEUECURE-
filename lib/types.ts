@@ -5,6 +5,7 @@ export interface Patient {
   token_number: number;
   name: string;
   status: PatientStatus;
+  is_priority: boolean;
   created_at: string;
   called_at: string | null;
   completed_at: string | null;
