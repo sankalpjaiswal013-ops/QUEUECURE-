@@ -6,6 +6,7 @@ export interface Patient {
   name: string;
   status: PatientStatus;
   is_priority: boolean;
+  is_edited: boolean;
   created_at: string;
   called_at: string | null;
   completed_at: string | null;

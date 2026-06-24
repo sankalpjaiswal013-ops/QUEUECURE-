@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Patient, ClinicSettings } from "@/lib/types";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 import { toast } from "sonner";
 
@@ -37,6 +39,9 @@ export default function ReceptionistPage() {
   // Edit State
   const [editingPatientId, setEditingPatientId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  
+  // Insights State
+  const [insightsOpen, setInsightsOpen] = useState(false);
 
   const fetchPatients = async () => {
     const startOfDay = new Date();
@@ -174,7 +179,7 @@ export default function ReceptionistPage() {
       setEditingPatientId(null);
       return;
     }
-    const { error } = await supabase.from("patients").update({ name: editingName.trim() }).eq("id", id);
+    const { error } = await supabase.from("patients").update({ name: editingName.trim(), is_edited: true }).eq("id", id);
     if (error) toast.error("Failed to update name");
     else {
       toast.success("Patient name updated");
@@ -211,6 +216,33 @@ export default function ReceptionistPage() {
           if (p.completed_at && p.called_at) {
             const diffMs = new Date(p.completed_at).getTime() - new Date(p.called_at).getTime();
             return acc + (diffMs / 60000);
+          }
+          return acc;
+        }, 0) / doneToday.length
+      )
+    : 0;
+
+  // -- Insights Data --
+  
+  const hourlyData = Array.from({ length: 12 }, (_, i) => {
+    const hour = i + 8; // 8 AM to 7 PM
+    const count = doneToday.filter(p => {
+      if (!p.completed_at) return false;
+      const d = new Date(p.completed_at);
+      return d.getHours() === hour;
+    }).length;
+    
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+    return { name: `${displayHour} ${ampm}`, patients: count };
+  });
+
+  const avgActualTotalTime = doneToday.length > 0 
+    ? Math.round(
+        doneToday.reduce((acc, p) => {
+          if (p.completed_at) {
+             const diffMs = new Date(p.completed_at).getTime() - new Date(p.created_at).getTime();
+             return acc + (diffMs / 60000);
           }
           return acc;
         }, 0) / doneToday.length
@@ -422,6 +454,9 @@ export default function ReceptionistPage() {
                             {p.is_priority && (
                               <span className="bg-rose-100 text-rose-700 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">Priority</span>
                             )}
+                            {p.is_edited && (
+                              <span className="bg-amber-100 text-amber-700 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">Edited</span>
+                            )}
                             <button 
                               onClick={() => { setEditingPatientId(p.id); setEditingName(p.name); }}
                               className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-blue-600 transition-opacity ml-2"
@@ -462,6 +497,54 @@ export default function ReceptionistPage() {
               </TableBody>
             </Table>
           </div>
+        </Card>
+
+        {/* Insights Card */}
+        <Card className="border-slate-100 shadow-sm rounded-2xl overflow-hidden mt-8">
+          <CardHeader className="bg-slate-50 border-b border-slate-100 py-4 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => setInsightsOpen(!insightsOpen)}>
+            <div className="flex justify-between items-center w-full">
+              <CardTitle className="text-lg text-slate-600">Today's Insights</CardTitle>
+              {insightsOpen ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+            </div>
+          </CardHeader>
+          {insightsOpen && (
+            <CardContent className="p-6 bg-white animate-in slide-in-from-top-2 duration-200">
+              <div className="grid md:grid-cols-3 gap-8">
+                
+                {/* Comparison Stat */}
+                <div className="flex flex-col justify-center items-center p-6 bg-slate-50 rounded-xl border border-slate-100 text-center">
+                  <h4 className="text-sm font-semibold uppercase tracking-widest text-slate-500 mb-6">Estimate Accuracy</h4>
+                  <div className="flex items-center gap-8">
+                    <div>
+                      <p className="text-3xl font-black text-blue-600">{settings?.avg_consultation_minutes || 0}<span className="text-sm font-medium text-slate-400 ml-1">min</span></p>
+                      <p className="text-xs font-medium uppercase tracking-wider text-slate-400 mt-2">Est. Consult</p>
+                    </div>
+                    <div className="w-px h-12 bg-slate-200"></div>
+                    <div>
+                      <p className="text-3xl font-black text-emerald-600">{avgActualTotalTime}<span className="text-sm font-medium text-slate-400 ml-1">min</span></p>
+                      <p className="text-xs font-medium uppercase tracking-wider text-slate-400 mt-2">Total Wait</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bar Chart */}
+                <div className="md:col-span-2 h-[250px] w-full flex flex-col">
+                  <h4 className="text-sm font-semibold uppercase tracking-widest text-slate-500 mb-4">Patients Served Per Hour</h4>
+                  <div className="flex-1">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={hourlyData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} dy={10} />
+                        <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                        <Tooltip cursor={{ fill: '#f1f5f9' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                        <Bar dataKey="patients" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+              </div>
+            </CardContent>
+          )}
         </Card>
 
         {/* Completed Patients Table */}

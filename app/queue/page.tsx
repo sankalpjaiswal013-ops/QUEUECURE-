@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Patient, ClinicSettings } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
+import { Volume2, VolumeX } from "lucide-react";
 
 import { toast } from "sonner";
 
@@ -18,6 +19,10 @@ export default function QueuePage() {
   // Track "Now Serving" to trigger animations when it changes
   const [nowServing, setNowServing] = useState<Patient | null>(null);
   const [animateKey, setAnimateKey] = useState(0);
+  
+  // Audio state
+  const [isMuted, setIsMuted] = useState(false);
+  const prevTokenRef = useRef<number | null>(null);
 
   const fetchData = async () => {
     const { data: pData, error: pError } = await supabase.from("patients").select("*").in("status", ["waiting", "in_consultation"]);
@@ -65,18 +70,25 @@ export default function QueuePage() {
     };
   }, []);
 
-  // Update `nowServing` and trigger animation key on change
+  // Update `nowServing` and trigger animation/audio on change
   useEffect(() => {
-    // There should ideally only be one 'in_consultation', but we take the first
     const current = patients.find((p) => p.status === "in_consultation") || null;
     
-    setNowServing((prev) => {
-      if (prev?.id !== current?.id) {
-        setAnimateKey((k) => k + 1);
+    if (current && current.token_number !== prevTokenRef.current) {
+      setAnimateKey((k) => k + 1);
+      
+      // Speak only if it's not the initial load and not muted
+      if (prevTokenRef.current !== null && !isMuted && 'speechSynthesis' in window) {
+        const msg = new SpeechSynthesisUtterance(`Token number ${current.token_number}, please proceed to the consultation room.`);
+        msg.rate = 0.9;
+        window.speechSynthesis.speak(msg);
       }
-      return current;
-    });
-  }, [patients]);
+      
+      prevTokenRef.current = current.token_number;
+    }
+    
+    setNowServing(current);
+  }, [patients, isMuted]);
 
   const peopleAhead = patients.filter((p) => p.status === "waiting").length;
   const avgMinutes = settings?.avg_consultation_minutes || 15;
@@ -103,17 +115,27 @@ export default function QueuePage() {
           QueueCure
         </h1>
         
-        {/* Dynamic Connection Status Badge */}
-        <div className={`flex items-center gap-3 px-4 py-2 rounded-full border ${isLive ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`}>
-          <div className="relative flex h-3 w-3">
-            {isLive && (
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            )}
-            <span className={`relative inline-flex rounded-full h-3 w-3 ${isLive ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+        {/* Controls and Status */}
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setIsMuted(!isMuted)} 
+            className="bg-slate-800 text-white p-2.5 rounded-full hover:bg-slate-700 transition shadow-sm border border-slate-700"
+            title={isMuted ? "Unmute Announcements" : "Mute Announcements"}
+          >
+            {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+          </button>
+          
+          <div className={`flex items-center gap-3 px-4 py-2 rounded-full border ${isLive ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`}>
+            <div className="relative flex h-3 w-3">
+              {isLive && (
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              )}
+              <span className={`relative inline-flex rounded-full h-3 w-3 ${isLive ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+            </div>
+            <span className="text-sm font-semibold tracking-wide uppercase hidden sm:inline-block">
+              {isLive ? 'Live Sync Active' : 'Disconnected'}
+            </span>
           </div>
-          <span className="text-sm font-semibold tracking-wide uppercase">
-            {isLive ? 'Live Sync Active' : 'Disconnected'}
-          </span>
         </div>
       </header>
 
@@ -140,6 +162,11 @@ export default function QueuePage() {
                   {nowServing.is_priority && (
                     <span className="bg-rose-500/20 text-rose-500 text-xl px-4 py-1.5 rounded-lg border border-rose-500/30 font-bold tracking-widest uppercase align-middle">
                       Priority
+                    </span>
+                  )}
+                  {nowServing.is_edited && (
+                    <span className="bg-amber-500/20 text-amber-500 text-xl px-4 py-1.5 rounded-lg border border-amber-500/30 font-bold tracking-widest uppercase align-middle">
+                      Edited
                     </span>
                   )}
                 </div>
@@ -198,6 +225,11 @@ export default function QueuePage() {
                     {p.is_priority && (
                       <span className="bg-rose-500/10 text-rose-500 text-xs font-bold uppercase tracking-wider px-2 py-1 rounded border border-rose-500/20">
                         Priority
+                      </span>
+                    )}
+                    {p.is_edited && (
+                      <span className="bg-amber-500/10 text-amber-500 text-xs font-bold uppercase tracking-wider px-2 py-1 rounded border border-amber-500/20 ml-2">
+                        Edited
                       </span>
                     )}
                   </div>
