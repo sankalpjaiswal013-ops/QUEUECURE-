@@ -12,7 +12,7 @@ import { Patient, ClinicSettings } from "@/lib/types";
 import { toast } from "sonner";
 
 // Helper for debouncing
-function debounce(fn: Function, delay: number) {
+function debounce(fn: (...args: any[]) => void, delay: number) {
   let timeoutId: NodeJS.Timeout;
   return (...args: any[]) => {
     clearTimeout(timeoutId);
@@ -150,7 +150,7 @@ export default function ReceptionistPage() {
 
   // -- Debounced Settings Update --
 
-  // eslint-disable-next-react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const updateAvgConsultation = useCallback(
     debounce(async (val: number) => {
       const { error } = await supabase.from("clinic_settings").update({ avg_consultation_minutes: val }).eq("id", 1);

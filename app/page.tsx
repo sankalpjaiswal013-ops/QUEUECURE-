@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 
 export default function Home() {
   return (
@@ -24,9 +24,12 @@ export default function Home() {
               <h2 className="text-2xl font-bold text-slate-900">Receptionist Portal</h2>
               <p className="text-slate-500">Manage patient check-ins, update statuses, and monitor the queue.</p>
             </div>
-            <Button asChild className="w-full" size="lg">
-              <Link href="/receptionist">Enter Portal</Link>
-            </Button>
+            <Link 
+              href="/receptionist" 
+              className={buttonVariants({ size: "lg", className: "w-full" })}
+            >
+              Enter Portal
+            </Link>
           </div>
 
           {/* Patient Waiting Room Card */}
@@ -38,9 +41,12 @@ export default function Home() {
               <h2 className="text-2xl font-bold text-slate-900">Waiting Room Display</h2>
               <p className="text-slate-500">Public dashboard showing the current queue and now-serving status.</p>
             </div>
-            <Button asChild variant="outline" className="w-full" size="lg">
-              <Link href="/queue">Open Display</Link>
-            </Button>
+            <Link 
+              href="/queue" 
+              className={buttonVariants({ variant: "outline", size: "lg", className: "w-full" })}
+            >
+              Open Display
+            </Link>
           </div>
         </div>
       </div>
